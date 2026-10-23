@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>대화로그 백업</title>
+  <link REL="STYLESHEET" TYPE="text/css" href="style.css">
+  <!-- Marked.js for Markdown parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>대화로그 백업 게시판</h1>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
+      <button class="btn btn-primary btn-sm" onclick="showFormView()">+ 새 글 작성</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteSelectedPosts()">선택 삭제</button>
+      <button class="btn btn-outline btn-sm" onclick="exportJSON()">JSON 백업</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('importFile').click()">JSON 복원</button>
+      <input type="file" id="importFile" class="hidden" accept=".json" onchange="importJSON(event)">
+      <button class="btn btn-outline btn-sm" id="darkModeBtn" onclick="toggleDarkMode()">🌙 </button>
+    </div>
+  </header>
+  
+  <!-- 1. 목록 페이지 View -->
+  <div id="listView">
+    <!-- 컨트롤 바 -->
+    <div class="controls-bar">
+      <div class="tag-filter-section">
+        <span class="filter-label">태그 목록:</span>
+        <div id="tagListContainer" class="tag-list-container"></div>
+      </div>
+
+      <div class="search-sort-section">
+          <label style="font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+            <input type="checkbox" id="bookmarkFilter" onchange="handleFilterChange()"> ★ 글만
+          </label>
+		  
+		<!-- 🔽 선택 태그 일괄 추가 영역 -->
+		<div style="display: flex; gap: 4px; align-items: center; background: var(--bg-main); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border-color);">
+			<input type="text" id="batchTagInput" placeholder="추가할 태그" style="width: 160px; padding: 4px 8px; font-size: 0.8rem;">
+			<button class="btn btn-outline btn-sm" onclick="addTagToSelectedPosts()">태그 추가</button>
+		</div>
+		<!-- 🔼 여기까지 -->
+		  
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="제목, 질문, 답변 내용 검색..." onkeyup="handleSearchKeyUp(event)">
+          <button class="btn btn-primary btn-sm" onclick="handleFilterChange()">검색</button>
+          <button class="btn btn-outline btn-sm" onclick="resetSearch()">초기화</button>
+        </div>
+		
+        <div class="sort-box">
+            <label for="sortOrder">정렬:</label>
+            <select id="sortOrder" onchange="handleFilterChange()">
+              <option value="newest">최신순</option>
+              <option value="oldest">등록순</option>
+            </select>
+        </div>
+		  
+      </div>
+    </div>
+
+    <!-- 데스크톱용 테이블 뷰 -->
+    <div class="table-responsive">
+      <table class="post-table">
+        <thead>
+          <tr>
+            <th style="width: 3%; text-align: center;">
+              <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)">
+            </th>
+            <th style="width: 4%; text-align: center;">★</th>
+            <th style="width: 50%;">제목 / 미리보기</th>
+            <th style="width: 26%; text-align:center;">태그</th>
+            <th style="width: 10%; text-align:center;">작성일</th>
+            <th style="width: 7%; text-align:center;">글자수</th>
+          </tr>
+        </thead>
+        <tbody id="postTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 모바일용 카드 리스트 뷰 -->
+    <div id="postCardContainer" class="post-card-container"></div>
+
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+  <!-- 2. 상세 페이지 View -->
+  <div id="detailView" class="hidden">
+    <div class="detail-header">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <button class="btn btn-outline btn-sm" onclick="showListView()">← 목록으로</button>
+        <div style="display: flex; gap: 12px;">
+          <button id="prevPostBtn" class="btn btn-outline btn-sm" onclick="navigateToPost('prev')">▲ 이전글</button>
+          <button id="nextPostBtn" class="btn btn-outline btn-sm" onclick="navigateToPost('next')">▼ 다음글</button>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button id="detailBookmarkBtn" class="btn btn-outline btn-sm" onclick="toggleBookmarkCurrentPost()" style="font-size: 1.1rem; padding: 2px 8px;">☆</button>
+        <h2 id="detailTitle" class="detail-title" style="margin-bottom:0;"></h2>
+      </div>
+
+      <div style="display:flex; gap:12px; justify-content: flex-end; align-items: center; margin-top: 8px; flex-wrap: wrap;">
+        <span id="detailTags"></span>
+        <span id="detailDate" class="detail-meta"></span>
+        <span id="detailCharCount" class="detail-meta"></span>
+		<span id="detailCommentCount" class="detail-meta"></span>
+        <button class="btn btn-outline btn-sm" onclick="editCurrentPost()">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCurrentPost()">삭제</button>
+        <button class="btn btn-secondary btn-sm" onclick="downloadTxt()">.txt 다운로드</button>
+      </div>
+    </div>
+
+    <!-- 질문 -->
+    <div class="chat-section user-question">
+      <div class="chat-section-top">
+        <span class="section-label">질문</span>
+        <button class="btn btn-outline btn-sm" onclick="copySectionText('detailQuestion')">복사</button>
+      </div>
+      <div id="detailQuestion" class="chat-content markdown-body"></div>
+    </div>
+
+    <!-- 답변 -->
+    <div class="chat-section ai-answer">
+      <div class="chat-section-top">
+        <span class="section-label">답변</span>
+        <button class="btn btn-outline btn-sm" onclick="copySectionText('detailAnswer')">복사</button>
+      </div>
+      <div id="detailAnswer" class="chat-content markdown-body"></div>
+    </div>
+
+    <!-- 댓글 영역 -->
+    <div class="comments-container">
+      <h3>댓글</h3>
+      <div id="commentsList"></div>
+      <div class="form-group" style="margin-top: 12px;">
+        <textarea id="newCommentInput" rows="15" placeholder="댓글을 입력하세요..."></textarea>
+        <button class="btn btn-primary btn-sm" style="margin-top: 8px;" onclick="addComment(null)">댓글 등록</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 작성/수정 Form View -->
+  <div id="formView" class="hidden">
+    <h2 id="formTitle" style="margin-bottom: 16px;">새 글 작성</h2>
+    <input type="hidden" id="editPostId">
+    
+    <div class="form-group">
+      <label for="postTitleInput">제목</label>
+      <input type="text" id="postTitleInput" placeholder="제목을 입력하세요">
+    </div>
+
+    <div class="form-group">
+      <label for="postTagsInput">태그 (쉼표로 구분)</label>
+      <input type="text" id="postTagsInput" placeholder="예: 설정, 질문, 썰">
+	  <div id="recentTagsContainer" class="recent-tags-container"></div>
+    </div>
+
+    <!-- 대화 원문 자동 파싱 도우미 박스 -->
+    <div class="parser-helper-box">
+      <label>💡 대화 원문 자동 분할 도우미 (선택사항)</label>
+      <p style="font-size: 0.8rem; color: var(--secondary-color); margin-bottom: 6px;">전체 대화 내용을 붙여넣고 버튼을 누르면 '질문'과 '답변' 영역으로 자동 분리됩니다. (구분자: "질문:", "답변:")</p>
+      <textarea id="rawChatInput" rows="4" placeholder="여기에 대화 전체 내용을 붙여넣으세요..."></textarea>
+      <button class="btn btn-outline btn-sm" style="margin-top: 6px;" onclick="parseRawChat()">질문/답변 자동 분할하기</button>
+    </div>
+
+    <div class="form-group">
+      <label for="postQuestionInput">[질문]</label>
+      <textarea id="postQuestionInput" rows="8" placeholder="질문 내용을 입력하세요"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="postAnswerInput">[답변]</label>
+      <textarea id="postAnswerInput" rows="12" placeholder="답변 내용을 입력하세요"></textarea>
+    </div>
+
+    <div style="display:flex; gap:8px; justify-content: flex-end;">
+      <button class="btn btn-outline" onclick="showListView()">취소</button>
+      <button class="btn btn-primary" onclick="savePost()">저장하기</button>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
